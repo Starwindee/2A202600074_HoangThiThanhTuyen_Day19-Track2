@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 import traceback
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -21,6 +22,9 @@ def step(label: str) -> None:
 def main() -> int:
     print("Day 19 lite smoke test")
     try:
+        cache_dir = ROOT / ".fastembed_cache"
+        cache_dir.mkdir(exist_ok=True)
+        os.environ.setdefault("FASTEMBED_CACHE_PATH", str(cache_dir))
         # ── 1. fastembed ────────────────────────────────────────────────
         step("fastembed loads + embeds (BAAI/bge-small-en-v1.5)")
         from fastembed import TextEmbedding

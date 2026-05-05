@@ -23,6 +23,20 @@ Mode = Literal["keyword", "semantic", "hybrid"]
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"   # 384-dim, CPU-friendly, multilingual works on VN
 EMBED_DIM = 384
 COLLECTION = "lab19_corpus"
+ROOT = Path(__file__).resolve().parent.parent
+CACHE_DIR = ROOT / ".fastembed_cache"
+
+
+def _pick_fastembed_cache() -> Path:
+    candidates = [
+        ROOT / ".fastembed_cache",
+        ROOT / ".fastembed_cache_run",
+        ROOT / ".fastembed_cache_fresh",
+    ]
+    for cache in candidates:
+        if any(cache.glob("**/model_optimized.onnx")):
+            return cache
+    return CACHE_DIR
 
 
 @dataclass
@@ -78,6 +92,9 @@ class Searcher:
         self.bm25 = BM25Okapi(tokenized)
 
     def _build_vector_index(self) -> None:
+        cache_dir = _pick_fastembed_cache()
+        cache_dir.mkdir(exist_ok=True)
+        os.environ.setdefault("FASTEMBED_CACHE_PATH", str(cache_dir))
         self.embedder = TextEmbedding(model_name=EMBED_MODEL)
 
         mode = os.getenv("QDRANT_MODE", "memory")

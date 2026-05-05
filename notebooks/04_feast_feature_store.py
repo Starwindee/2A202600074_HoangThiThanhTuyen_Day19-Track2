@@ -16,7 +16,9 @@
 
 # %%
 import _setup  # noqa: F401
+import os
 import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -26,6 +28,32 @@ REPO_ROOT = Path(_setup.__file__).resolve().parent.parent
 FEAST_DIR = REPO_ROOT / "app" / "feast_repo"
 FEAST_DATA = FEAST_DIR / "data"
 FEAST_DATA.mkdir(exist_ok=True)
+FEAST_RUNTIME = Path.home() / ".codex" / "memories" / "feast_runtime"
+FEAST_RUNTIME.mkdir(exist_ok=True)
+TMP_DIR = FEAST_RUNTIME / "tmp"
+TMP_DIR.mkdir(exist_ok=True)
+os.environ["TMP"] = str(TMP_DIR)
+os.environ["TEMP"] = str(TMP_DIR)
+PROM_DIR = FEAST_DIR / ".prom_metrics"
+PROM_DIR.mkdir(exist_ok=True)
+os.environ["PROMETHEUS_MULTIPROC_DIR"] = str(PROM_DIR)
+FEAST_BIN = str(Path(sys.executable).with_name("feast.exe"))
+
+# Use unique sqlite/registry files each run to avoid stale lock/corruption issues.
+_run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+fs_yaml = FEAST_DIR / "feature_store.yaml"
+yaml_text = fs_yaml.read_text(encoding="utf-8")
+registry_path = (FEAST_RUNTIME / f"registry_{_run_id}.db").resolve().as_posix()
+online_path = (FEAST_RUNTIME / f"online_store_{_run_id}.db").resolve().as_posix()
+yaml_text = yaml_text.replace(
+    "registry: registry.db",
+    f"registry: {registry_path}",
+)
+yaml_text = yaml_text.replace(
+    "path: online_store.db",
+    f"path: {online_path}",
+)
+fs_yaml.write_text(yaml_text, encoding="utf-8")
 
 # %% [markdown]
 # ## 1. Sinh dữ liệu offline (Parquet) cho 3 feature views
@@ -84,8 +112,9 @@ for p in sorted(FEAST_DATA.glob("*.parquet")):
 
 # %%
 res = subprocess.run(
-    ["feast", "apply"],
+    [FEAST_BIN, "apply"],
     cwd=str(FEAST_DIR),
+    env=os.environ.copy(),
     capture_output=True, text=True, check=False,
 )
 print("STDOUT:")
@@ -104,8 +133,9 @@ assert res.returncode == 0, f"feast apply failed: {res.stderr}"
 # %%
 end_dt = NOW.strftime("%Y-%m-%dT%H:%M:%S")
 res = subprocess.run(
-    ["feast", "materialize-incremental", end_dt],
+    [FEAST_BIN, "materialize-incremental", end_dt],
     cwd=str(FEAST_DIR),
+    env=os.environ.copy(),
     capture_output=True, text=True, check=False,
 )
 print(res.stdout[-1500:])
